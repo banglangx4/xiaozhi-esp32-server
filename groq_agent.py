@@ -11,18 +11,35 @@ from typing import List
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") 
 
 # Đọc URL Repository từ GitHub Actions (biến môi trường)
-# URL này sẽ được Actions tự động truyền vào
 REPO_URL = os.environ.get("REPO_URL") 
 
-# Tên mô hình (Chọn mô hình có context lớn)
+# Tên mô hình Groq (32K Context)
 MODEL_NAME = "meta-llama/llama-4-scout-17b-16e-instruct" 
 
 # Cấu hình nội bộ
 TEMP_DIR = "./temp_groq_repo"
-OUTPUT_DOC_FILE = "PROJECT_DOCUMENTATION.md" # Tên file tài liệu đầu ra
+OUTPUT_DOC_FILE = "PROJECT_DOCUMENTATION.md"
 MAX_CONTEXT_TOKEN = 32000 
-# Thư mục/File cần loại trừ khỏi quá trình phân tích
-EXCLUDE_DIRS = ['node_modules', '.git', '__pycache__', 'venv', 'dist', 'build', 'tests', 'docs', 'PROJECT_DOCUMENTATION.md']
+
+# Danh sách THƯ MỤC/TỆP CẦN LOẠI TRỪ để giảm thiểu Token Input
+EXCLUDE_DIRS = [
+    'node_modules',       # Thư viện JavaScript (RẤT LỚN)
+    'vendor',             # Thư viện PHP/Ruby (Lớn)
+    'build',              # File đã biên dịch/Build
+    'dist',               # File phân phối
+    'assets',             # Tài nguyên tĩnh (Ảnh, fonts)
+    'images',             # Thư mục ảnh
+    'media',              # Tệp media/uploads
+    'logs',               # Tệp log
+    'data',               # Tệp dữ liệu lớn/thô
+    'docs',               # Thư mục tài liệu (Tránh tự phân tích tài liệu cũ)
+    '.git', 
+    '__pycache__', 
+    'venv', 
+    'test',               # Thư mục chứa Unit/Integration Tests (Tùy chọn)
+    'tests',
+    OUTPUT_DOC_FILE       # Loại trừ file kết quả để không tự phân tích chính nó
+]
 # ====================================================================
 
 # Prompt chuyên gia (Đảm bảo đầu ra chuyên nghiệp)
@@ -63,7 +80,6 @@ def clone_and_bundle_repo() -> str:
     
     print(f"Đang clone repository từ {REPO_URL}...")
     try:
-        # Clone repo
         git.Repo.clone_from(REPO_URL, TEMP_DIR)
     except git.exc.GitCommandError as e:
         print(f"\n❌ LỖI CLONE GIT: Vui lòng kiểm tra lại URL hoặc Token truy cập. Chi tiết: {e}")
@@ -72,23 +88,27 @@ def clone_and_bundle_repo() -> str:
     code_bundle: List[str] = []
     
     for root, dirs, files in os.walk(TEMP_DIR, topdown=True):
+        # Loại trừ các thư mục đã định nghĩa
         dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith('.')]
         
         for file in files:
-            if file.endswith(('.js', '.py', '.html', '.css', '.ts', '.jsx', '.tsx', '.json', '.yaml', '.yml', '.env', 'Dockerfile', '.md')):
-                file_path = os.path.join(root, file)
-                relative_path = os.path.relpath(file_path, TEMP_DIR)
-                if relative_path in EXCLUDE_DIRS: continue # Bỏ qua các file đã loại trừ
+            file_path = os.path.join(root, file)
+            relative_path = os.path.relpath(file_path, TEMP_DIR)
+            
+            # Kiểm tra loại trừ file (ví dụ: file log lớn)
+            if any(relative_path.endswith(ext) for ext in ('.log', '.bin', '.sqlite')):
+                 continue
 
-                try:
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
-                        # Cấu trúc hóa file code
-                        code_bundle.append(f"\n\n### --- FILE START: {relative_path} ---\n")
-                        code_bundle.append(content)
-                        code_bundle.append(f"\n### --- FILE END: {relative_path} ---\n")
-                except Exception as e:
-                    print(f"  LỖI ĐỌC TỆP {relative_path}: {e}")
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                    # Cấu trúc hóa file code
+                    code_bundle.append(f"\n\n### --- FILE START: {relative_path} ---\n")
+                    code_bundle.append(content)
+                    code_bundle.append(f"\n### --- FILE END: {relative_path} ---\n")
+            except Exception as e:
+                # Bỏ qua các file không thể đọc (ví dụ: file binary)
+                continue
 
     # Xóa thư mục tạm sau khi gộp thành công
     shutil.rmtree(TEMP_DIR) 
@@ -147,6 +167,7 @@ def run_agent():
         print("\n" + analysis_result)
         return
 
+    # Ghi đè lên file cũ
     with open(OUTPUT_DOC_FILE, 'w', encoding='utf-8') as f:
         f.write(analysis_result)
     
