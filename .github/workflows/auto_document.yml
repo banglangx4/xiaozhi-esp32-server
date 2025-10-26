@@ -1,0 +1,43 @@
+name: Auto Groq Documentation
+
+# Kích hoạt workflow khi có push code lên nhánh chính (main/master)
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  analyze_and_document:
+    runs-on: ubuntu-latest # Sử dụng môi trường miễn phí của GitHub Actions
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4 # Tải mã nguồn repo
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Dependencies
+        run: |
+          # Cài đặt các thư viện cần thiết
+          pip install groq gitpython
+
+      - name: Execute Groq Code Agent
+        env:
+          # Truyền Groq API Key từ Secrets vào Agent
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }} 
+          # Truyền URL của repo hiện tại
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          # Chạy tập lệnh Python
+          python groq_agent.py
+
+      - name: Commit Generated Documentation
+        # Hành động này tự động commit file tài liệu đã tạo trở lại repo
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'Docs: Auto-generated documentation update by Groq Agent'
+          files: PROJECT_DOCUMENTATION.md
