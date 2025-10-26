@@ -9,7 +9,7 @@ on:
 
 jobs:
   analyze_and_document:
-    runs-on: ubuntu-latest # Sử dụng môi trường miễn phí của GitHub Actions
+    runs-on: ubuntu-latest # Sử dụng môi trường miễn phí của GitHub Actions .
 
     steps:
       - name: Checkout Repository Code
